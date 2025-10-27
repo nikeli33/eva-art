@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EVA AI Art Generator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'logi-dark': '#1e053a', // Очень темный фиолетовый (для фона body)
+                        'logi-card': 'rgba(64, 20, 102, 0.7)',
+                        'logi-accent': '#c4b5fd', // Более светлый и яркий фиолетовый акцент
+                        'logi-header-bg': 'rgba(46, 10, 80, 0.8)', // Фон для хедера
+                        'bubble-active': '#9333ea', // Яркий фиолетовый для активного "пузырька"
+                        'bubble-glow': 'rgba(196, 181, 253, 0.7)', // Светящийся фиолетовый для тени
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    <script type="module" src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        /* Стиль для градиентного фона, имитирующий неоновый фиолетовый */
+        body {
+            background-image: 
+                linear-gradient(rgba(30, 5, 58, 0.99), rgba(30, 5, 58, 0.9)), /* logi-dark #1e053a с 70% прозрачностью */
+                url("AISamurai.png"); /* 2. ВТОРОЙ СЛОЙ: Изображение */
+            background-position: center; /* Center the image */
+        /*    background-repeat: no-repeat; */
+            background-size: cover; /* Resize the background image to cover the entire container */
+        /*    background: linear-gradient(135deg, #1e053a 0%, #3a0f75 50%, #1e053a 100%);*/
+            min-height: 100vh;
+            color: white;
+            padding-bottom: 5rem; /* Отступ для нижней навигации */
+        }
+        /* Стилизация полосы прокрутки для браузеров на основе WebKit */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1e053a;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #a78bfa;
+            border-radius: 10px;
+        }
+        
+        .neon-shadow {
+            box-shadow: 0 0 8px rgba(167, 139, 250, 0.4), 0 4px 10px rgba(0, 0, 0, 0.4); 
+        }
+
+        .active-style {
+            border: 3px solid #c4b5fd; /* logi-accent border */
+            box-shadow: 0 0 15px rgba(196, 181, 253, 0.8), 0 0 30px rgba(147, 51, 234, 0.6); 
+            transform: scale(1.05);
+            transition: all 0.2s ease-in-out;
+        }
+
+        .style-card:not(.active-style):hover {
+            box-shadow: 0 0 10px rgba(196, 181, 253, 0.7), 0 0 20px rgba(147, 51, 234, 0.5); 
+            transform: scale(1.05);
+            transition: all 0.2s ease-in-out;
+        }
+        
+        .neon-hover:hover {
+            box-shadow: 0 0 10px rgba(196, 181, 253, 0.7), 0 0 20px rgba(147, 51, 234, 0.5); 
+            transform: scale(1.05);
+        }
+        
+        .style-card-container {
+            overflow: visible !important; 
+        }
+
+        /* Стили для навбара */
+        .nav-bg {
+            background: rgba(30, 5, 58, 0.9);
+            border-top: 1px solid rgba(196, 181, 253, 0.3);
+            backdrop-filter: blur(8px);
+        }
+        
+        .nav-item {
+            color: white;
+            padding: 4px 0;
+        }
+        .nav-item.active {
+            color: #c4b5fd; /* logi-accent */
+        }
+        
+        #bubble {
+            background: linear-gradient(45deg, #9333ea, #c4b5fd);
+            box-shadow: 0 0 15px #c4b5fd, 0 0 25px #9333ea;
+            border: 1px solid #c4b5fd;
+            border-radius: 12px;
+        }
+
+        /* Стиль для модального окна просмотра */
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.9);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        .modal-content-img {
+            max-width: 90%;
+            max-height: 90%;
+            border-radius: 12px;
+            object-fit: contain;
+            box-shadow: 0 0 30px rgba(196, 181, 253, 0.8);
+        }
+        .close-button {
+            position: absolute;
+            top: 20px;
+            right: 35px;
+            color: #fff;
+            font-size: 40px;
+            font-weight: bold;
+            transition: 0.3s;
+            cursor: pointer;
+        }
+        .close-button:hover,
+        .close-button:focus {
+            color: #c4b5fd;
+            text-decoration: none;
+            cursor: pointer;
+        }
+        
+        /* 🔥 NEW: Стиль для модального окна, чтобы вместить текст */
+        .modal-content {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            max-width: 90%;
+            max-height: 90%;
+        }
+
+    </style>
+</head>
+<body class="font-sans antialiased">
+
+    <header class="sticky top-0 z-50 p-4 bg-logi-header-bg backdrop-blur-sm shadow-xl">
+        <div class="flex justify-between items-center max-w-lg mx-auto">
+            <button class="text-white hover:text-logi-accent transition">
+                <i data-lucide="menu" class="w-7 h-7"></i>
+            </button>
+            
+            <h1 class="text-2xl font-extrabold tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-pink-400 to-logi-accent">
+                EVA.art
+            </h1>
+            
+            <button class="text-white hover:text-logi-accent transition">
+                <i data-lucide="bell" class="w-7 h-7"></i>
+            </button>
+        </div>
+    </header>
+
+    <main class="p-4 space-y-8 max-w-lg mx-auto">
+        
+        <div data-content="generate" class="page-content space-y-8">
+            <section>
+                <div class="flex justify-between items-center mb-3">
+                    <h2 class="text-xl font-bold text-white">Введите Промпт</h2>
+                    <a href="#" class="text-logi-accent hover:text-pink-400 transition text-sm font-medium">Поиск</a>
+                </div>
+                
+                <div class="relative bg-logi-card p-4 rounded-2xl shadow-lg border border-purple-700/50 neon-shadow">
+                    <textarea 
+                        id="promptInput"
+                        class="w-full h-28 bg-transparent text-white placeholder-purple-300/70 resize-none focus:outline-none"
+                        placeholder="Например: 'Китаянка в традиционном красном платье стоит рядом с величественным красным драконом на фоне туманных гор, детализированно, фотореалистично.'"
+                    ></textarea>
+                    <button id="generateButton" onclick="generateImage()" class="w-full mt-3 p-3 text-lg font-semibold rounded-xl bg-logi-accent hover:bg-logi-accent/90 text-logi-dark transition neon-shadow">
+                        Создать Изображение
+                    </button>
+                </div>
+            </section>
+
+            <section>
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-xl font-bold text-white">Стиль Арта</h2>
+                    <a href="#" class="text-logi-accent hover:text-pink-400 transition text-sm font-medium">Смотреть все</a>
+                </div>
+                
+                <div id="artStyleContainer" class="style-card-container flex gap-4 overflow-x-auto pb-4 scroll-smooth">
+                    <div data-style="none" class="style-card flex-shrink-0 w-24 h-24 rounded-xl overflow-hidden bg-logi-card/80 flex flex-col items-center justify-center p-2 text-center border-2 border-transparent transition cursor-pointer active-style neon-shadow" onclick="selectStyle(this, 'Без Стиля')">
+                        <i data-lucide="ban" class="w-8 h-8 text-pink-400 mb-1"></i>
+                        <span class="text-xs font-semibold">Без Стиля</span>
+                    </div>
+
+                    <div data-style="anime" class="style-card flex-shrink-0 w-24 h-24 rounded-xl overflow-hidden border-2 border-transparent transition cursor-pointer neon-shadow" onclick="selectStyle(this, 'Аниме')">
+                        <img src="https://raw.githubusercontent.com/nikeli33/telegra-ph-images/refs/heads/main/images/imgenegrato/anime.png" alt="Anime Style" class="w-full h-full object-cover rounded-xl" onerror="this.onerror=null; this.src='https://placehold.co/128x128/4c2f88/fff?text=Anime';" />
+                    </div>
+
+                    <div data-style="fantasy" class="style-card flex-shrink-0 w-24 h-24 rounded-xl overflow-hidden border-2 border-transparent transition cursor-pointer neon-shadow" onclick="selectStyle(this, 'Фэнтези')">
+                        <img src="https://raw.githubusercontent.com/nikeli33/telegra-ph-images/refs/heads/main/images/imgenegrato/phsntasy.png" alt="Fantasy Style" class="w-full h-full object-cover rounded-xl" onerror="this.onerror=null; this.src='https://placehold.co/128x128/6a0f49/fff?text=Fantasy';" />
+                    </div>
+
+                    <div data-style="cityscape" class="style-card flex-shrink-0 w-24 h-24 rounded-xl overflow-hidden border-2 border-transparent transition cursor-pointer neon-shadow" onclick="selectStyle(this, 'Киберпанк')">
+                        <img src="https://raw.githubusercontent.com/nikeli33/telegra-ph-images/refs/heads/main/images/imgenegrato/cyberpunk.png" alt="Cityscape Style" class="w-full h-full object-cover rounded-xl" onerror="this.onerror=null; this.src='https://placehold.co/128x128/1a5276/fff?text=City';" />
+                    </div>
+                </div>
+                <input type="hidden" id="selectedStyle" value="Без Стиля">
+            </section>
+            
+            <section>
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-xl font-bold text-white">Последние изображения</h2>
+                    <a href="#" class="text-logi-accent hover:text-pink-400 transition text-sm font-medium" 
+                        onclick="navigate(document.querySelector('[data-item=\'gallery\']'), 'gallery'); event.preventDefault();">
+                        Перейти в Галерею
+                    </a>
+                </div>
+                
+                <div id="latestImagesContainer" class="grid grid-cols-2 gap-4 min-h-[160px]">
+                    <div class="w-full h-32 col-span-2 flex items-center justify-center text-logi-accent/80 font-semibold rounded-xl bg-purple-900/50">
+                        Загрузка последних...
+                    </div>
+                </div>
+            </section>
+
+        </div>
+        
+        <div data-content="gallery" class="page-content hidden">
+             <h2 class="text-3xl font-bold text-white mb-6 pt-4">Моя Галерея</h2>
+            <div id="fullImageGallery" class="grid grid-cols-2 gap-4 min-h-[250px]">
+                <div class="w-full h-32 col-span-2 flex items-center justify-center text-logi-accent/80 font-semibold rounded-xl bg-purple-900/50">
+                    Загрузка галереи...
+                </div>
+            </div>
+        </div>
+        
+        <div data-content="profile" class="page-content hidden">
+            <h2 class="text-3xl font-bold text-white mb-6 pt-4">Профиль Пользователя</h2>
+            <div class="bg-logi-card p-6 rounded-2xl space-y-4 neon-shadow">
+                <p class="text-lg">Ваш баланс: <span class="text-bubble-active font-bold">150 Кредитов</span></p>
+                <p class="text-sm text-purple-300">План: Бесплатный</p>
+                <button class="w-full mt-3 p-3 text-md font-semibold rounded-xl bg-pink-500 hover:bg-pink-600 text-white transition">
+                    Пополнить Кредиты
+                </button>
+            </div>
+        </div>
+        
+        <div data-content="settings" class="page-content hidden">
+            <h2 class="text-3xl font-bold text-white mb-6 pt-4">Настройки Приложения</h2>
+            <div class="bg-logi-card p-6 rounded-2xl space-y-4 neon-shadow">
+                <div class="flex justify-between items-center border-b border-purple-600/50 pb-2">
+                    <span class="text-md">Темный режим</span>
+                    <input type="checkbox" checked class="h-6 w-6 rounded text-pink-500 focus:ring-pink-500 bg-gray-700 border-gray-600">
+                </div>
+                <div class="flex justify-between items-center">
+                    <span class="text-md">Язык</span>
+                    <span class="text-logi-accent">Русский</span>
+                </div>
+            </div>
+        </div>
+        
+        <div id="messageBox" class="fixed inset-x-0 bottom-24 mx-auto w-11/12 max-w-xs p-4 bg-yellow-500 text-gray-900 rounded-lg shadow-2xl text-center transition-opacity duration-300 opacity-0 pointer-events-none z-50">
+            Сообщение
+        </div>
+
+    </main>
+    
+    <div id="imageModal" class="modal">
+        <span class="close-button" onclick="closeModal()">&times;</span>
+        <div class="modal-content">
+            <img class="modal-content-img mb-4" id="modalImage">
+            <div id="modalPrompt" class="bg-logi-card p-4 rounded-xl max-w-full text-sm text-center"></div>
+        </div>
+    </div>
+    
+    <nav class="fixed bottom-0 left-0 right-0 z-50 p-3 nav-bg shadow-2xl">
+        <div class="relative flex justify-around items-center h-12 max-w-lg mx-auto" id="navContainer">
+            <div id="bubble" class="absolute h-full rounded-xl bg-gradient-to-r from-pink-500 to-bubble-active transition-all duration-300 ease-in-out"></div>
+
+            <button data-item="generate" class="nav-item flex flex-col items-center text-sm font-medium transition duration-300 relative z-10 w-1/4 active" onclick="navigate(this, 'generate')">
+                <i data-lucide="sparkles" class="w-6 h-6"></i>
+                <span class="text-xs hidden sm:inline">Создать</span>
+            </button>
+            
+            <button data-item="gallery" class="nav-item flex flex-col items-center text-sm font-medium transition duration-300 relative z-10 w-1/4" onclick="navigate(this, 'gallery')">
+                <i data-lucide="image" class="w-6 h-6"></i>
+                <span class="text-xs hidden sm:inline">Галерея</span>
+            </button>
+            
+            <button data-item="profile" class="nav-item flex flex-col items-center text-sm font-medium transition duration-300 relative z-10 w-1/4" onclick="navigate(this, 'profile')">
+                <i data-lucide="user" class="w-6 h-6"></i>
+                <span class="text-xs hidden sm:inline">Профиль</span>
+            </button>
+            
+            <button data-item="settings" class="nav-item flex flex-col items-center text-sm font-medium transition duration-300 relative z-10 w-1/4" onclick="navigate(this, 'settings')">
+                <i data-lucide="settings" class="w-6 h-6"></i>
+                <span class="text-xs hidden sm:inline">Настройки</span>
+            </button>
+        </div>
+    </nav>
+
+
+    <script>
+        // Глобальные ссылки
+        const navItems = document.querySelectorAll('.nav-item');
+        const pageContents = document.querySelectorAll('.page-content');
+        const generateButton = document.getElementById('generateButton');
+        let currentActiveItem = null;
+
+        // 💡 ВАЖНО: ЗАМЕНИТЕ ЭТИ АДРЕСА НА ВАШИ АДРЕСА ВЕБХУКОВ N8N!
+        const GENERATE_WEBHOOK_URL = 'https://n8n.eva-dragon.ru/webhook/imagegen'; 
+        const GALLERY_WEBHOOK_URL = 'https://n8n.eva-dragon.ru/webhook/get-galery'; 
+        // --------------------------------------------------
+
+        // --------------------------------------------------
+        // ЛОГИКА НАВБАРА И UI
+        // --------------------------------------------------
+
+        function updateBubblePosition(activeItem) {
+            const bubble = document.getElementById('bubble');
+            const navContainer = document.getElementById('navContainer');
+            
+            if (!bubble || !navContainer || !activeItem) return;
+
+            const rect = activeItem.getBoundingClientRect();
+            const containerRect = navContainer.getBoundingClientRect();
+            
+            const left = rect.left - containerRect.left;
+            const width = rect.width;
+            
+            bubble.style.left = `${left}px`;
+            bubble.style.width = `${width}px`;
+            bubble.style.top = '0px'; 
+            
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function navigate(clickedItem, contentId) {
+            if (currentActiveItem && clickedItem === currentActiveItem) {
+                // Если нажимаем на галерею, когда она уже открыта, просто перезагружаем её
+                if (contentId === 'gallery') {
+                    fetchAllImages();
+                }
+                return;
+            }
+
+            navItems.forEach(item => item.classList.remove('active'));
+            clickedItem.classList.add('active');
+            
+            updateBubblePosition(clickedItem);
+
+            pageContents.forEach(content => {
+                if (content.getAttribute('data-content') === contentId) {
+                    content.classList.remove('hidden');
+                } else {
+                    content.classList.add('hidden');
+                }
+            });
+
+            currentActiveItem = clickedItem;
+            
+            // Если перешли в галерею, загружаем все изображения
+            if (contentId === 'gallery') {
+                fetchAllImages(); 
+            }
+        }
+        
+        function initNavbar() {
+            if (!navItems.length) return;
+            
+            currentActiveItem = document.querySelector('.nav-item.active') || navItems[0];
+            
+            updateBubblePosition(currentActiveItem);
+
+            window.addEventListener('resize', () => {
+                if (window.resizeTimer) clearTimeout(window.resizeTimer);
+                window.resizeTimer = setTimeout(() => {
+                    updateBubblePosition(currentActiveItem);
+                }, 100);
+            });
+            
+            // Загрузка последних изображений при старте
+            fetchLatestImages();
+        }
+        
+        /**
+         * Функция для отображения кастомного сообщения вместо alert()
+         */
+        function showMessage(text, isError = false) {
+            const messageBox = document.getElementById('messageBox');
+            
+            messageBox.classList.remove('bg-yellow-500', 'bg-red-500', 'bg-green-500');
+            
+            if (isError) {
+                messageBox.classList.add('bg-red-500');
+            } else if (text.includes("Готово!")) {
+                 messageBox.classList.add('bg-green-500');
+            } else {
+                messageBox.classList.add('bg-yellow-500');
+            }
+
+            messageBox.textContent = text;
+            messageBox.classList.remove('opacity-0', 'pointer-events-none');
+            
+            setTimeout(() => {
+                messageBox.classList.add('opacity-0', 'pointer-events-none');
+            }, 3000);
+        }
+
+        function selectStyle(element, styleName) {
+            const styleCards = document.querySelectorAll('.style-card');
+            const selectedStyleInput = document.getElementById('selectedStyle');
+
+            styleCards.forEach(card => {
+                card.classList.remove('active-style');
+            });
+
+            element.classList.add('active-style');
+            selectedStyleInput.value = styleName;
+
+            showMessage(`Выбран стиль: ${styleName}`);
+        }
+        
+        // --- Логика Модального окна ---
+        function openModal(imageUrl, promptText) {
+            const modal = document.getElementById('imageModal');
+            const modalImage = document.getElementById('modalImage');
+            const modalPrompt = document.getElementById('modalPrompt'); // 🔥 Новый элемент
+
+            modalImage.src = imageUrl;
+            modalImage.alt = promptText || "Сгенерированное изображение";
+            modalPrompt.textContent = promptText || "Нет описания (промпта)"; // 🔥 Отображаем промпт
+            modal.style.display = 'flex';
+        }
+
+        function closeModal() {
+            document.getElementById('imageModal').style.display = 'none';
+        }
+        // Закрыть модальное окно при клике вне изображения
+        document.getElementById('imageModal').addEventListener('click', (e) => {
+            if (e.target.id === 'imageModal') {
+                closeModal();
+            }
+        });
+
+
+        // --------------------------------------------------
+        // ЛОГИКА ГАЛЕРЕИ: ЗАГРУЗКА ИЗОБРАЖЕНИЙ ИЗ БД
+        // --------------------------------------------------
+
+        /**
+         * Генерирует HTML-разметку для одного изображения.
+         */
+        function createImageCard(image) {
+            // ⭐ ИСПРАВЛЕНО: Убедитесь, что вы получаете данные из ноды n8n.
+            // Если нода Respond to Webhook возвращает { image_url: '...', russian_prompt: '...' }
+            const imageUrl = image.image_url; 
+            const promptText = image.russian_prompt || 'Изображение без описания'; 
+
+            if (!imageUrl) return ''; // Пропускаем, если ссылки нет
+
+            // Экранирование кавычек в промпте для функции onclick
+            const safePrompt = promptText.replace(/'/g, "\\'").replace(/"/g, '\\"');
+
+            return `
+                <div class="w-full aspect-square rounded-xl overflow-hidden shadow-xl bg-purple-900/50 transition cursor-pointer neon-hover neon-shadow"
+                    onclick="openModal('${imageUrl}', '${safePrompt}')">
+                    <img src="${imageUrl}" 
+                        alt="${promptText}" 
+                        title="${promptText}"
+                        class="w-full h-full object-cover">
+                </div>
+            `;
+        }
+
+        /**
+         * Загружает и отображает список изображений.
+         */
+        async function fetchImages(containerId, endpointUrl, limit) {
+            const container = document.getElementById(containerId);
+            if (!container) return;
+
+            // Отображаем заглушку (Loader)
+            // 🔥 ВАЖНО: Заглушка должна иметь col-span-2, чтобы занять всю ширину,
+            // но при успешной загрузке контент должен быть заменен на 
+            // элементы, которые занимают 1 колонку.
+            container.innerHTML = `
+                <div class="w-full h-32 col-span-2 flex items-center justify-center text-logi-accent/80 font-semibold rounded-xl bg-purple-900/50">
+                    Загрузка изображений...
+                </div>
+            `;
+            
+            try {
+                // Отправляем запрос с лимитом в Query Parameter.
+                const response = await fetch(`${endpointUrl}?limit=${limit}`, { 
+                    method: 'GET',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status} ${response.statusText}`);
+                }
+
+                // Ожидаем JSON массив объектов
+                let images = await response.json(); 
+                
+                // Проверяем, что n8n вернул массив. n8n всегда возвращает массив, если используется $items()
+                const imagesArray = Array.isArray(images) && images.length > 0 && Array.isArray(images[0]) 
+                    ? images[0] : (Array.isArray(images) ? images : (images ? [images] : []));
+
+                // Убедимся, что мы работаем с массивом данных, извлекая данные из "main" при необходимости
+                const finalImages = imagesArray.flatMap(item => item.json || item);
+
+
+                if (finalImages.length > 0) {
+                    const html = finalImages.map(createImageCard).join('');
+                    container.innerHTML = html;
+                } else {
+                    container.innerHTML = `
+                        <div class="w-full h-32 col-span-2 flex items-center justify-center text-purple-400 font-medium">
+                            Галерея пуста. Начните генерацию!
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                console.error(`Ошибка при загрузке изображений из ${endpointUrl}:`, error);
+                container.innerHTML = `
+                    <div class="w-full h-32 col-span-2 flex items-center justify-center text-red-400 font-medium">
+                        Ошибка загрузки галереи. Проверьте Webhook и SQL-запрос.
+                    </div>
+                `;
+            }
+        }
+        
+        // 1. Загрузка только 4 последних изображений для секции "Generate"
+        function fetchLatestImages() {
+            fetchImages('latestImagesContainer', GALLERY_WEBHOOK_URL, 4);
+        }
+
+        // 2. Загрузка всех изображений для секции "Gallery"
+        function fetchAllImages() {
+            // Загружаем 50 последних изображений для галереи
+            fetchImages('fullImageGallery', GALLERY_WEBHOOK_URL, 50); 
+        }
+
+
+        // --------------------------------------------------
+        // ЛОГИКА ГЕНЕРАЦИИ
+        // --------------------------------------------------
+
+        async function generateImage() {
+            const prompt = document.getElementById('promptInput').value;
+            const style = document.getElementById('selectedStyle').value;
+
+            if (prompt.trim() === "") {
+                showMessage("Пожалуйста, введите промпт для генерации.", true);
+                return;
+            }
+            
+            // Блокировка кнопки и отображение загрузки
+            generateButton.disabled = true;
+            generateButton.innerHTML = '<i data-lucide="loader-2" class="w-5 h-5 animate-spin inline-block mr-2"></i> Генерация... Подождите ⏳';
+            if (typeof lucide !== 'undefined') lucide.createIcons(); // Обновить иконку, если lucide доступен
+            generateButton.classList.add('opacity-70');
+            showMessage(`Запрос на генерацию отправлен! Стиль: ${style}.`);
+
+            const payload = {
+                russian_prompt: prompt,
+                art_style: style
+            };
+
+            try {
+                // Отправляем запрос на генерацию (метод POST)
+                const response = await fetch(GENERATE_WEBHOOK_URL, {
+                    method: 'POST', // Этот Webhook должен быть настроен на POST
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(payload),
+                });
+
+                if (response.ok) {
+                    
+                    showMessage("✅ Генерация Готово! Изображение сохранено в галерее.", false);
+                    
+                    // ⭐ Ключевой шаг: обновляем галереи после успешной генерации
+                    fetchLatestImages(); 
+                    // Если галерея открыта, обновим и ее
+                    if (document.querySelector('[data-content="gallery"]').classList.contains('hidden') === false) {
+                        fetchAllImages();
+                    }
+                    
+                    // Очистка промпта
+                    document.getElementById('promptInput').value = ''; 
+                    
+                } else {
+                    const errorText = await response.text();
+                    showMessage(`❌ Ошибка генерации: ${response.status} ${response.statusText}`, true);
+                    console.error("Webhook Error:", response.status, response.statusText, errorText);
+                }
+            } catch (error) {
+                console.error("Fetch error:", error);
+                showMessage("❌ Ошибка сети или недоступность сервера n8n.", true);
+            } finally {
+                // Разблокировка кнопки
+                generateButton.disabled = false;
+                generateButton.textContent = 'Создать Изображение';
+                generateButton.classList.remove('opacity-70');
+            }
+        }
+
+        // --------------------------------------------------
+        // ЗАПУСК ПРИЛОЖЕНИЯ
+        // --------------------------------------------------
+
+        document.addEventListener('DOMContentLoaded', () => {
+            if (typeof lucide !== 'undefined') {
+                lucide.createIcons();
+            }
+            initNavbar();
+        });
+
+    </script>
+</body>
+</html>
