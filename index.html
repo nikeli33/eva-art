@@ -32,9 +32,9 @@
                 linear-gradient(rgba(30, 5, 58, 0.99), rgba(30, 5, 58, 0.9)), /* logi-dark #1e053a с 70% прозрачностью */
                 url("AISamurai.png"); /* 2. ВТОРОЙ СЛОЙ: Изображение */
             background-position: center; /* Center the image */
-        /*    background-repeat: no-repeat; */
+            /*    background-repeat: no-repeat; */
             background-size: cover; /* Resize the background image to cover the entire container */
-        /*    background: linear-gradient(135deg, #1e053a 0%, #3a0f75 50%, #1e053a 100%);*/
+            /*    background: linear-gradient(135deg, #1e053a 0%, #3a0f75 50%, #1e053a 100%);*/
             min-height: 100vh;
             color: white;
             padding-bottom: 5rem; /* Отступ для нижней навигации */
@@ -114,7 +114,7 @@
         }
         .modal-content-img {
             max-width: 90%;
-            max-height: 90%;
+            max-height: 70vh;
             border-radius: 12px;
             object-fit: contain;
             box-shadow: 0 0 30px rgba(196, 181, 253, 0.8);
@@ -144,6 +144,22 @@
             max-width: 90%;
             max-height: 90%;
         }
+
+        /* Кнопка скачивания */
+        .download-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            border-radius: 12px;
+            background: linear-gradient(90deg, rgba(196,181,253,1), rgba(147,51,234,1));
+            color: #1e053a;
+            font-weight: 600;
+            box-shadow: 0 6px 18px rgba(147,51,234,0.25);
+            text-decoration: none;
+            margin-top: 0.5rem;
+        }
+        .download-btn:hover { transform: translateY(-2px); }
 
     </style>
 </head>
@@ -178,7 +194,7 @@
                     <textarea 
                         id="promptInput"
                         class="w-full h-28 bg-transparent text-white placeholder-purple-300/70 resize-none focus:outline-none"
-                        placeholder="Например: 'Китаянка в традиционном красном платье стоит рядом с величественным красным драконом на фоне туманных гор, детализированно, фотореалистично.'"
+                        placeholder="Например: 'Китаянка в традиционном красном платье рядом с величественным красным драконом.'"
                     ></textarea>
                     <button id="generateButton" onclick="generateImage()" class="w-full mt-3 p-3 text-lg font-semibold rounded-xl bg-logi-accent hover:bg-logi-accent/90 text-logi-dark transition neon-shadow">
                         Создать Изображение
@@ -276,6 +292,11 @@
         <div class="modal-content">
             <img class="modal-content-img mb-4" id="modalImage">
             <div id="modalPrompt" class="bg-logi-card p-4 rounded-xl max-w-full text-sm text-center"></div>
+            <!-- Кнопка скачивания -->
+            <a id="downloadButton" href="#" class="download-btn" title="Скачать изображение">
+                <i data-lucide="download-cloud" class="w-4 h-4"></i>
+                <span>Скачать</span>
+            </a>
         </div>
     </div>
     
@@ -432,10 +453,27 @@
             const modal = document.getElementById('imageModal');
             const modalImage = document.getElementById('modalImage');
             const modalPrompt = document.getElementById('modalPrompt'); // 🔥 Новый элемент
+            const downloadButton = document.getElementById('downloadButton');
 
             modalImage.src = imageUrl;
             modalImage.alt = promptText || "Сгенерированное изображение";
             modalPrompt.textContent = promptText || "Нет описания (промпта)"; // 🔥 Отображаем промпт
+
+            // Формируем безопасное имя файла
+            const filename = sanitizeFilename((promptText || 'image')) + '.png';
+
+            // Сохраним данные в dataset для кнопки
+            downloadButton.dataset.imageUrl = imageUrl;
+            downloadButton.dataset.filename = filename;
+
+            // Предотвращаем дефолтное поведение якоря — скачиваем через JS
+            downloadButton.onclick = function (e) {
+                e.preventDefault();
+                const url = this.dataset.imageUrl;
+                const name = this.dataset.filename || 'image.png';
+                downloadImage(url, name);
+            };
+
             modal.style.display = 'flex';
         }
 
@@ -449,6 +487,37 @@
             }
         });
 
+        // Утилита — безопасное имя файла
+        function sanitizeFilename(name) {
+            return name
+                .toString()
+                .normalize('NFKD')
+                .replace(/\s+/g, '_')
+                .replace(/[^a-zA-Z0-9_\-\.]/g, '')
+                .slice(0, 60);
+        }
+
+        // Функция загрузки изображения (попытка fetch -> blob, иначе открываем в новой вкладке)
+        async function downloadImage(url, filename) {
+            try {
+                const response = await fetch(url, {mode: 'cors'});
+                if (!response.ok) throw new Error('Network response was not ok');
+                const blob = await response.blob();
+                const blobUrl = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = blobUrl;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                URL.revokeObjectURL(blobUrl);
+            } catch (err) {
+                console.warn('Не удалось скачать через fetch, откроем изображение в новой вкладке:', err);
+                // Фолбэк: откроем изображение в новой вкладке — пользователь сможет сохранить вручную
+                window.open(url, '_blank');
+            }
+        }
 
         // --------------------------------------------------
         // ЛОГИКА ГАЛЕРЕИ: ЗАГРУЗКА ИЗОБРАЖЕНИЙ ИЗ БД
@@ -466,7 +535,7 @@
             if (!imageUrl) return ''; // Пропускаем, если ссылки нет
 
             // Экранирование кавычек в промпте для функции onclick
-            const safePrompt = promptText.replace(/'/g, "\\'").replace(/"/g, '\\"');
+            const safePrompt = promptText.replace(/'/g, "\\'").replace(/\"/g, '\\"');
 
             return `
                 <div class="w-full aspect-square rounded-xl overflow-hidden shadow-xl bg-purple-900/50 transition cursor-pointer neon-hover neon-shadow"
@@ -487,9 +556,6 @@
             if (!container) return;
 
             // Отображаем заглушку (Loader)
-            // 🔥 ВАЖНО: Заглушка должна иметь col-span-2, чтобы занять всю ширину,
-            // но при успешной загрузке контент должен быть заменен на 
-            // элементы, которые занимают 1 колонку.
             container.innerHTML = `
                 <div class="w-full h-32 col-span-2 flex items-center justify-center text-logi-accent/80 font-semibold rounded-xl bg-purple-900/50">
                     Загрузка изображений...
@@ -497,7 +563,6 @@
             `;
             
             try {
-                // Отправляем запрос с лимитом в Query Parameter.
                 const response = await fetch(`${endpointUrl}?limit=${limit}`, { 
                     method: 'GET',
                     headers: { 'Content-Type': 'application/json' }
@@ -507,14 +572,11 @@
                     throw new Error(`HTTP error! status: ${response.status} ${response.statusText}`);
                 }
 
-                // Ожидаем JSON массив объектов
                 let images = await response.json(); 
                 
-                // Проверяем, что n8n вернул массив. n8n всегда возвращает массив, если используется $items()
                 const imagesArray = Array.isArray(images) && images.length > 0 && Array.isArray(images[0]) 
                     ? images[0] : (Array.isArray(images) ? images : (images ? [images] : []));
 
-                // Убедимся, что мы работаем с массивом данных, извлекая данные из "main" при необходимости
                 const finalImages = imagesArray.flatMap(item => item.json || item);
 
 
